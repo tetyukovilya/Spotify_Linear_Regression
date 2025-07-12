@@ -26,6 +26,32 @@ class TrackFeatures(BaseModel):
     liveness: float
     valence: float
     tempo: float
+    duration_ms: int
+    key: int
+    mode: int
+    time_signature: int
+    explicit: int
+
+    # Пример значений по умолчанию
+    class Config:
+        schema_extra = {
+            "example": {
+                "danceability": 0.8,
+                "energy": 0.7,
+                "loudness": -5.0,
+                "speechiness": 0.05,
+                "acousticness": 0.01,
+                "instrumentalness": 0.0,
+                "liveness": 0.1,
+                "valence": 0.9,
+                "tempo": 120,
+                "duration_ms": 210000,
+                "key": 5,
+                "mode": 1,
+                "time_signature": 4,
+                "explicit": 0
+            }
+        }
 
 
 @app.get("/")
@@ -48,32 +74,44 @@ def health_check():
 @app.post("/predict")
 def predict(features: TrackFeatures):
     try:
-        # Преобразуем входные данные в список в правильном порядке
-        input_list = [
-            features.danceability,
-            features.energy,
-            features.loudness,
-            features.speechiness,
-            features.acousticness,
-            features.instrumentalness,
-            features.liveness,
-            features.valence,
-            features.tempo
+        # Основные признаки
+        input_data = {
+            'danceability': features.danceability,
+            'energy': features.energy,
+            'loudness': features.loudness,
+            'speechiness': features.speechiness,
+            'acousticness': features.acousticness,
+            'instrumentalness': features.instrumentalness,
+            'liveness': features.liveness,
+            'valence': features.valence,
+            'tempo': features.tempo,
+            'duration_ms': features.duration_ms,
+            'key': features.key,
+            'mode': features.mode,
+            'time_signature': features.time_signature,
+            'explicit': features.explicit
+        }
+
+        # Вычисляем производные признаки
+        input_data['energy_dance'] = features.energy * features.danceability
+        input_data['acoustic_energy'] = features.acousticness * (1 - features.energy)
+        input_data['energy_combo'] = features.energy * (1 - features.acousticness) * (1 - features.instrumentalness)
+
+        # Создаем массив в правильном порядке
+        feature_names = [
+            'danceability', 'energy', 'loudness', 'speechiness',
+            'acousticness', 'instrumentalness', 'liveness', 'valence', 'tempo',
+            'duration_ms', 'key', 'mode', 'time_signature', 'explicit',
+            'energy_combo'  # Последний признак
         ]
 
-        # Преобразуем в numpy массив
-        input_array = np.array(input_list).reshape(1, -1)
+        input_array = np.array([input_data[col] for col in feature_names]).reshape(1, -1)
 
-        # Масштабируем
+        # Масштабируем и предсказываем
         scaled_data = scaler.transform(input_array)
-
-        # Делаем предсказание
         prediction = model.predict(scaled_data)[0]
 
         return {"predicted_popularity": float(prediction)}
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Prediction error: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
